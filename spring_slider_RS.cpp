@@ -26,6 +26,21 @@ struct _p_Params {
 };
 typedef struct _p_Params *Params;
 
+void pack_vals(DieterichRuinaAgeing *law, Params p, int idx)
+{
+  law->V0    = p->V0[idx];
+  law->b     = p->b[idx];
+  law->f0    = p->f0[idx];
+  law->a     = p->a[idx];
+  law->eta   = p->eta[idx];
+  law->L     = p->L[idx];
+  law->sn    = p->sn[idx];
+  law->Vinit = p->Vinit[idx];
+  law->Vp    = p->Vp[idx];
+  law->k     = p->k[idx];
+  law->yield_point_init = p->yield_point_init[idx];
+}
+
 static PetscErrorCode RHSFunction_spring_slider_batch(TS ts, PetscReal t, Vec U, Vec F, void *ctx)
 {
   PetscScalar           *f;
@@ -46,6 +61,10 @@ static PetscErrorCode RHSFunction_spring_slider_batch(TS ts, PetscReal t, Vec U,
   for (k=0; k<npoints; k++) {
     D = (double)PetscRealPart(u[nvar_per_point*k+0]);
     psi = (double)PetscRealPart(u[nvar_per_point*k+1]);
+
+    // pack
+    pack_vals(alwa, p, k);
+
     tau = alwa->k * ((alwa->Vp * ((double)t) + alwa->yield_point_init) - D);
     V = alwa->slip_rate(tau, psi);
     f[nvar_per_point*k+0] = (PetscScalar)V;
@@ -76,6 +95,8 @@ PetscErrorCode ts_soln_view(TS ts)
   PetscCall(TSGetRHSFunction(ts, NULL, NULL, &ctx));
   p = (Params)ctx;
   alwa = p->statelaw;
+  pack_vals(alwa, p, 0);
+
   PetscCall(TSGetStepNumber(ts, &step));
   PetscCall(TSGetTime(ts, &time));
   PetscCall(TSGetSolution(ts, &U));
@@ -252,7 +273,7 @@ int main(int argc, char **argv)
   for (k=0; k<npoints; k++) {
     double tau_init, psi_init;
 
-    tau_init = alwa.k * alwa.yield_point_init;
+    tau_init = ctx->k[k] * ctx->yield_point_init[k];
     psi_init = alwa.psi_init(tau_init);
 
     u[nvar_per_point * k + 0] = 0.0;
