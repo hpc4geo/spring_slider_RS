@@ -33,7 +33,6 @@ static PetscErrorCode RHSFunction_spring_slider_batch(TS ts, PetscReal t, Vec U,
   double                D, psi, tau, V;
   Params                p = (Params)ctx;
   DieterichRuinaAgeing  *alwa = p->statelaw;
-  //DieterichRuinaAgeing  *alwa = static_cast<DieterichRuinaAgeing*>(ctx);
   PetscInt              npoints, len, nvar_per_point, k;
 
   PetscFunctionBeginUser;
@@ -49,15 +48,12 @@ static PetscErrorCode RHSFunction_spring_slider_batch(TS ts, PetscReal t, Vec U,
     psi = (double)PetscRealPart(u[nvar_per_point*k+1]);
     tau = alwa->k * ((alwa->Vp * ((double)t) + alwa->yield_point_init) - D);
     V = alwa->slip_rate(tau, psi);
-
     f[nvar_per_point*k+0] = (PetscScalar)V;
     f[nvar_per_point*k+1] = (PetscScalar)alwa->state_rhs(V, psi);
   }
 
   PetscCall(VecRestoreArrayRead(U, &u));
   PetscCall(VecRestoreArray(F, &f));
-  VecView(F,PETSC_VIEWER_STDOUT_WORLD);
-  //exit(0);
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -70,14 +66,16 @@ PetscErrorCode ts_soln_view(TS ts)
   PetscReal time;
   double D, psi, V, tau;
   void *ctx = NULL, *ctx_app = NULL;
-  DieterichRuinaAgeing* alwa = NULL;
-  std::ofstream  *out_file;
+  Params               p = NULL;
+  DieterichRuinaAgeing *alwa = NULL;
+  std::ofstream        *out_file;
 
   PetscFunctionBeginUser;
   PetscCall(TSGetApplicationContext(ts,&ctx_app));
   out_file = static_cast<std::ofstream*>(ctx_app);
   PetscCall(TSGetRHSFunction(ts, NULL, NULL, &ctx));
-  alwa = static_cast<DieterichRuinaAgeing*>(ctx);
+  p = (Params)ctx;
+  alwa = p->statelaw;
   PetscCall(TSGetStepNumber(ts, &step));
   PetscCall(TSGetTime(ts, &time));
   PetscCall(TSGetSolution(ts, &U));
