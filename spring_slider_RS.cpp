@@ -2,29 +2,19 @@
 #include <petscdm.h>
 #include <petsc/private/tsimpl.h>
 #include <fstream>
-#include <iomanip> 
+#include <iomanip>
 
 #include "DieterichRuinaAgeing.h"
-
-DieterichRuinaAgeing alwa;
-std::ofstream out_file;
-
 
 static PetscErrorCode RHSFunction_spring_slider(TS ts, PetscReal t, Vec U, Vec F, void *ctx)
 {
   PetscScalar       *f;
   const PetscScalar *u;
   PetscScalar       D, psi;
-
-  
   DieterichRuinaAgeing* alwa = static_cast<DieterichRuinaAgeing*>(ctx);
   double tau;
-  
   double V;
 
-
-
-  
   PetscFunctionBeginUser;
   PetscCall(VecGetArrayRead(U, &u));
   PetscCall(VecGetArray(F, &f));
@@ -49,16 +39,25 @@ PetscErrorCode ts_soln_view(TS ts)
   const PetscScalar *u;
   PetscInt step;
   PetscScalar time;
+  void *ctx = NULL;
+  void *ctx_app = NULL;
+  DieterichRuinaAgeing* alwa = NULL;
+  std::ofstream  *out_file;
+
   PetscFunctionBeginUser;
+  PetscCall(TSGetApplicationContext(ts,&ctx_app));
+  out_file = static_cast<std::ofstream*>(ctx_app);
+  PetscCall(TSGetRHSFunction(ts, NULL, NULL, &ctx));
+  alwa = static_cast<DieterichRuinaAgeing*>(ctx);
   PetscCall(TSGetStepNumber(ts, &step));
   PetscCall(TSGetTime(ts, &time));
   PetscCall(TSGetSolution(ts, &U));
   PetscCall(VecGetArrayRead(U, &u));
   PetscScalar D = u[0];
   PetscScalar psi = u[1];
-  double tau = alwa.k * (alwa.Vp * time - D);
-  double V = alwa.slip_rate(tau, psi);
-  out_file << std::scientific << std::setprecision(4) << (double)time << "," << (double)D << "," << (double)psi << "," << V << "," << tau << std::endl;
+  double tau = alwa->k * (alwa->Vp * time - D);
+  double V = alwa->slip_rate(tau, psi);
+  (*out_file) << std::scientific << std::setprecision(4) << (double)time << "," << (double)D << "," << (double)psi << "," << V << "," << tau << std::endl;
   PetscCall(VecRestoreArrayRead(U, &u));
   PetscFunctionReturn(0);
 }
@@ -66,6 +65,9 @@ PetscErrorCode ts_soln_view(TS ts)
 
 int main(int argc, char **argv)
 {
+  DieterichRuinaAgeing alwa;
+  std::ofstream out_file;
+
   if (argc != 14) {
     std::cout << "Usage: " << argv[0] << " V0 f0 a b eta L sn Vinit Vp k yield_point_init final_time" << std::endl;
     return 1;
@@ -82,14 +84,11 @@ int main(int argc, char **argv)
   alwa.k = std::stof(argv[10]);
   alwa.yield_point_init = std::stof(argv[11]);
 
-
   double finle_time = std::stof(argv[12]);
   double tau_init = alwa.k * alwa.yield_point_init;
   double psi_init = alwa.psi_init(tau_init);
 
   std::string out_file_name = argv[13];
-  
-
 
   std::cout << "Parameters:" << std::endl;
   std::cout << "V0 = " << alwa.V0 << std::endl;
@@ -127,6 +126,7 @@ int main(int argc, char **argv)
   PetscCall(TSSetType(ts, TSRK));
   PetscCall(TSSetProblemType(ts, TS_NONLINEAR));
 
+  PetscCall(TSSetApplicationContext(ts, static_cast<void*>(&out_file)));
   PetscCall(TSSetRHSFunction(ts, NULL, RHSFunction_spring_slider, static_cast<void*>(&alwa)));
 
   /* initial condition */
@@ -149,13 +149,13 @@ int main(int argc, char **argv)
   PetscCall(TSAdaptSetStepLimits(adapt, 0.0, 2000000.0));
 
   PetscCall(TSSetPostStep(ts, ts_soln_view));
-  
+
   PetscCall(TSSetFromOptions(ts));
 
   PetscCall(TSSetUp(ts));
 
   PetscCall(TSSolve(ts, U));
-  
+
   PetscCall(VecDestroy(&U));
   PetscCall(TSDestroy(&ts));
 
