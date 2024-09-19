@@ -68,36 +68,80 @@ int main(int argc, char **argv)
   double       final_time, tau_init, psi_init;
   TS           ts; /* ODE integrator */
   Vec          U;  /* solution will be stored here */
-  PetscMPIInt  size;
+  PetscMPIInt  commsize;
   PetscInt     n = 2;
   PetscScalar  *u = NULL;
   TSAdapt      adapt;
-
+  PetscBool    found;
+  PetscReal    arg_r;
+  char         fname[PETSC_MAX_PATH_LEN];
 
   PetscFunctionBeginUser;
   PetscCall(PetscInitialize(&argc, &argv, (char *)0, NULL));
 
-  if (argc != 14) {
-    std::cout << "Usage: " << argv[0] << " V0 f0 a b eta L sn Vinit Vp k yield_point_init final_time" << std::endl;
-    return 1;
-  }
-  alwa.V0 = std::stof(argv[1]);
-  alwa.f0 = std::stof(argv[2]);
-  alwa.a = std::stof(argv[3]);
-  alwa.b = std::stof(argv[4]);
-  alwa.eta = std::stof(argv[5]);
-  alwa.L = std::stof(argv[6]);
-  alwa.sn = std::stof(argv[7]);
-  alwa.Vinit = std::stof(argv[8]);
-  alwa.Vp = std::stof(argv[9]);
-  alwa.k = std::stof(argv[10]);
-  alwa.yield_point_init = std::stof(argv[11]);
+  found = PETSC_FALSE; PetscOptionsGetReal(NULL,NULL,"-V0",&arg_r,&found);
+  if (!found) { SETERRQ(PETSC_COMM_WORLD,PETSC_ERR_SUP,"Require value be provided for -V0"); }
+  else { alwa.V0 = (double)arg_r; }
 
-  final_time = std::stof(argv[12]);
+  found = PETSC_FALSE; PetscOptionsGetReal(NULL,NULL,"-f0",&arg_r,&found);
+  if (!found) { SETERRQ(PETSC_COMM_WORLD,PETSC_ERR_SUP,"Require value be provided for -f0"); }
+  else { alwa.f0 = (double)arg_r; }
+
+  found = PETSC_FALSE; PetscOptionsGetReal(NULL,NULL,"-a",&arg_r,&found);
+  if (!found) { SETERRQ(PETSC_COMM_WORLD,PETSC_ERR_SUP,"Require value be provided for -a"); }
+  else { alwa.a = (double)arg_r; }
+
+  found = PETSC_FALSE; PetscOptionsGetReal(NULL,NULL,"-b",&arg_r,&found);
+  if (!found) { SETERRQ(PETSC_COMM_WORLD,PETSC_ERR_SUP,"Require value be provided for -b"); }
+  else { alwa.b = (double)arg_r; }
+
+  found = PETSC_FALSE; PetscOptionsGetReal(NULL,NULL,"-eta",&arg_r,&found);
+  if (!found) { SETERRQ(PETSC_COMM_WORLD,PETSC_ERR_SUP,"Require value be provided for -eta"); }
+  else { alwa.eta = (double)arg_r; }
+
+  found = PETSC_FALSE; PetscOptionsGetReal(NULL,NULL,"-L",&arg_r,&found);
+  if (!found) { SETERRQ(PETSC_COMM_WORLD,PETSC_ERR_SUP,"Require value be provided for -L"); }
+  else { alwa.L = (double)arg_r; }
+
+  found = PETSC_FALSE; PetscOptionsGetReal(NULL,NULL,"-sn",&arg_r,&found);
+  if (!found) { SETERRQ(PETSC_COMM_WORLD,PETSC_ERR_SUP,"Require value be provided for -sn"); }
+  else { alwa.sn = (double)arg_r; }
+
+  found = PETSC_FALSE; PetscOptionsGetReal(NULL,NULL,"-Vinit",&arg_r,&found);
+  if (!found) { SETERRQ(PETSC_COMM_WORLD,PETSC_ERR_SUP,"Require value be provided for -Vinit"); }
+  else { alwa.Vinit = (double)arg_r; }
+
+  found = PETSC_FALSE; PetscOptionsGetReal(NULL,NULL,"-Vp",&arg_r,&found);
+  if (!found) { SETERRQ(PETSC_COMM_WORLD,PETSC_ERR_SUP,"Require value be provided for -Vp"); }
+  else { alwa.Vp = (double)arg_r; }
+
+  found = PETSC_FALSE; PetscOptionsGetReal(NULL,NULL,"-k",&arg_r,&found);
+  if (!found) { SETERRQ(PETSC_COMM_WORLD,PETSC_ERR_SUP,"Require value be provided for -k"); }
+  else { alwa.k = (double)arg_r; }
+
+  found = PETSC_FALSE; PetscOptionsGetReal(NULL,NULL,"-yield_point_init",&arg_r,&found);
+  if (!found) { SETERRQ(PETSC_COMM_WORLD,PETSC_ERR_SUP,"Require value be provided for -yield_point_init"); }
+  else { alwa.yield_point_init = (double)arg_r; }
+
+  found = PETSC_FALSE; PetscOptionsGetReal(NULL,NULL,"-final_time",&arg_r,&found);
+  if (!found) { SETERRQ(PETSC_COMM_WORLD,PETSC_ERR_SUP,"Require value be provided for -final_time"); }
+  else { final_time = (double)arg_r; }
+
+  std::string out_file_name = std::string("");
+  found = PETSC_FALSE; PetscOptionsGetString(NULL,NULL,"-output",fname,sizeof(fname),&found);
+  if (!found) { SETERRQ(PETSC_COMM_WORLD,PETSC_ERR_SUP,"Require value be provided for -output"); }
+  else {  out_file_name.replace(out_file_name.begin(), out_file_name.end(), fname); }
+
+
+  out_file.open(out_file_name);
+  if (!out_file) {
+      std::cerr << "Error opening output file" << std::endl;
+      SETERRQ(PETSC_COMM_WORLD,PETSC_ERR_SUP,"Error opening output file");
+  }
+  out_file << "t,D,psi,V,tau" << std::endl;
+
   tau_init = alwa.k * alwa.yield_point_init;
   psi_init = alwa.psi_init(tau_init);
-
-  std::string out_file_name = argv[13];
 
   std::cout << "Parameters:" << std::endl;
   std::cout << "V0 = " << alwa.V0 << std::endl;
@@ -113,14 +157,8 @@ int main(int argc, char **argv)
   std::cout << "Initial state:" << psi_init <<std::endl;
   std::cout << "final_time = " << final_time << std::endl;
 
-  out_file.open(out_file_name);
-  if (!out_file) {
-      std::cerr << "Error opening out.txt" << std::endl;
-      return 1;
-      }
-  out_file << "t,D,psi,V,tau" << std::endl;
 
-  PetscCallMPI(MPI_Comm_size(PETSC_COMM_WORLD, &size));
+  PetscCallMPI(MPI_Comm_size(PETSC_COMM_WORLD, &commsize));
 
   PetscCall(TSCreate(PETSC_COMM_WORLD, &ts));
   PetscCall(TSSetType(ts, TSRK));
