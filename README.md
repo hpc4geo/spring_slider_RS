@@ -41,7 +41,7 @@ To use this model:
 1. First, install PETSc as described in the Tandem [docs](https://tandem.readthedocs.io/en/latest/getting-started/installation.html).
 2. Clone this repository:
    ```bash
-   $ git clone https://github.com/yohaimagen/spring_slider_RS.git
+   $ git clone https://github.com/hpc4geo/spring_slider_RS.git
    $ cd spring_slider_RS
    ```
 3. Declare PETSc variables:
@@ -61,10 +61,10 @@ To use this model:
 
 You can run the model directly from the command line:
 ```bash
-$ ./app V0 f0 a b eta L sn Vinit Vp k yield_point_init final_time output.txt
+$ ./app -V0 <V0> -f0 <f0> -a <a> -b <b> -eta <eta> -L <L> -sn <sn> -Vinit <Vinit> -Vp <Vp> -k <k> -yield_point_init <yield_point_init> -final_time <final_time> -output <output.txt>
 ```
 with the appropriate values.
-where the `yield_point_init` paramter dictates the initial shear stress by:
+where the `<yield_point_init>` paramter dictates the initial shear stress by:
 $\tau_{init} = k * y_{init}$
 
 The file `.petscrc` contains PETSc TS object [parameters](https://petsc.org/release/manualpages/TS/TSSetFromOptions/) that can be changed. 
@@ -72,7 +72,7 @@ The file `.petscrc` contains PETSc TS object [parameters](https://petsc.org/rele
 ## example
 Runing the model with:
 ```bash
-$ ./app 1e-06 0.6 0.015 0.02 4500000.0 0.1 50000000.0 1e-09 1e-08 500000 10 15768000000 out.txt
+$ ./app -V0 1e-06 -f0 0.6 -a 0.015 -b 0.02 -eta 4500000.0 -L 0.1 -sn 50000000.0 -Vinit 1e-09 -Vp 1e-08 -k 500000 -yield_point_init 10 -output out.txt -final_time 15768000000.0
 $ gnuplot plot.gp
 ```
 should create the following results:
