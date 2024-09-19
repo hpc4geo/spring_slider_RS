@@ -75,7 +75,7 @@ int main(int argc, char **argv)
 {
   DieterichRuinaAgeing alwa;
   std::ofstream out_file;
-  double       final_time, tau_init, psi_init;
+  double       final_time;
   TS           ts; /* ODE integrator */
   Vec          U;  /* solution will be stored here */
   PetscMPIInt  commsize;
@@ -159,10 +159,6 @@ int main(int argc, char **argv)
   found = PETSC_FALSE; PetscOptionsGetInt(NULL,NULL,"-npoints",&npoints,&found);
   if (!found) { SETERRQ(comm,PETSC_ERR_SUP,"Require value be provided for -npoints"); }
 
-
-  tau_init = alwa.k * alwa.yield_point_init;
-  psi_init = alwa.psi_init(tau_init);
-
   std::cout << "Parameters:" << std::endl;
   std::cout << "V0 = " << alwa.V0 << std::endl;
   std::cout << "f0 = " << alwa.f0 << std::endl;
@@ -174,7 +170,13 @@ int main(int argc, char **argv)
   std::cout << "Vinit = " << alwa.Vinit << std::endl;
   std::cout << "Vp = " << alwa.Vp << std::endl;
   std::cout << "k = " << alwa.k << std::endl;
-  std::cout << "Initial state:" << psi_init <<std::endl;
+  {
+    double tau_init, psi_init;
+
+    tau_init = alwa.k * alwa.yield_point_init;
+    psi_init = alwa.psi_init(tau_init);
+    std::cout << "Initial state:" << psi_init <<std::endl;
+  }
   std::cout << "final_time = " << final_time << std::endl;
 
   std::cout << "npoints = " << (int)npoints << std::endl;
@@ -197,6 +199,11 @@ int main(int argc, char **argv)
   nvar_per_point = (DIM -1) + 1;
   PetscCall(VecGetArray(U, &u));
   for (k=0; k<npoints; k++) {
+    double tau_init, psi_init;
+
+    tau_init = alwa.k * alwa.yield_point_init;
+    psi_init = alwa.psi_init(tau_init);
+
     u[nvar_per_point * k + 0] = 0.0;
     u[nvar_per_point * k + 1] = psi_init;
   }
