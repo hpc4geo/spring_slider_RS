@@ -79,7 +79,7 @@ int main(int argc, char **argv)
   TS           ts; /* ODE integrator */
   Vec          U;  /* solution will be stored here */
   PetscMPIInt  commsize;
-  PetscInt     npoints = 1, len, nvar_per_point, k, d;
+  PetscInt     npoints = 1, len, nvar_per_point, k;
   PetscScalar  *u = NULL;
   TSAdapt      adapt;
   PetscBool    found;
