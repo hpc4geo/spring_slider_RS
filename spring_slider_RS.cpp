@@ -29,7 +29,7 @@ static PetscErrorCode RHSFunction_spring_slider(TS ts, PetscReal t, Vec U, Vec F
 
   PetscCall(VecRestoreArrayRead(U, &u));
   PetscCall(VecRestoreArray(F, &f));
-  PetscFunctionReturn(0);
+  PetscFunctionReturn(PETSC_SUCCESS);
 }
 
 
@@ -59,7 +59,7 @@ PetscErrorCode ts_soln_view(TS ts)
   double V = alwa->slip_rate(tau, psi);
   (*out_file) << std::scientific << std::setprecision(4) << (double)time << "," << (double)D << "," << (double)psi << "," << V << "," << tau << std::endl;
   PetscCall(VecRestoreArrayRead(U, &u));
-  PetscFunctionReturn(0);
+  PetscFunctionReturn(PETSC_SUCCESS);
 }
 
 
@@ -67,6 +67,9 @@ int main(int argc, char **argv)
 {
   DieterichRuinaAgeing alwa;
   std::ofstream out_file;
+
+  PetscFunctionBeginUser;
+  PetscCall(PetscInitialize(&argc, &argv, (char *)0, NULL));
 
   if (argc != 14) {
     std::cout << "Usage: " << argv[0] << " V0 f0 a b eta L sn Vinit Vp k yield_point_init final_time" << std::endl;
@@ -118,8 +121,6 @@ int main(int argc, char **argv)
   PetscScalar *u;
   TSAdapt      adapt;
 
-  PetscFunctionBeginUser;
-  PetscCall(PetscInitialize(&argc, &argv, (char *)0, NULL));
   PetscCallMPI(MPI_Comm_size(PETSC_COMM_WORLD, &size));
 
   PetscCall(TSCreate(PETSC_COMM_WORLD, &ts));
