@@ -15,14 +15,15 @@ static PetscErrorCode RHSFunction_spring_slider_batch(TS ts, PetscReal t, Vec U,
   double                D, psi, tau, V;
   DieterichRuinaAgeing  *alwa = static_cast<DieterichRuinaAgeing*>(ctx);
   PetscInt              npoints, len, nvar_per_point, k;
+  PetscMemType          mt_u, mt_f;
 
   PetscFunctionBeginUser;
   PetscCall(VecGetLocalSize(U,&len));
   nvar_per_point = (DIM -1) + 1;
   npoints = len / nvar_per_point;
 
-  PetscCall(VecGetArrayRead(U, &u));
-  PetscCall(VecGetArray(F, &f));
+  PetscCall(VecGetArrayReadAndMemType(U, &u, &mt_u));
+  PetscCall(VecGetArrayWriteAndMemType(F, &f, &mt_f));
 
   for (k=0; k<npoints; k++) {
 
@@ -35,8 +36,8 @@ static PetscErrorCode RHSFunction_spring_slider_batch(TS ts, PetscReal t, Vec U,
     f[nvar_per_point*k+1] = (PetscScalar)alwa->state_rhs(V, psi);
   }
 
-  PetscCall(VecRestoreArrayRead(U, &u));
-  PetscCall(VecRestoreArray(F, &f));
+  PetscCall(VecRestoreArrayReadAndMemType(U, &u));
+  PetscCall(VecRestoreArrayWriteAndMemType(F, &f));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -79,7 +80,7 @@ int main(int argc, char **argv)
   TS           ts; /* ODE integrator */
   Vec          U;  /* solution will be stored here */
   PetscMPIInt  commsize;
-  PetscInt     npoints = 1, len, nvar_per_point, k, d;
+  PetscInt     npoints = 1, len, nvar_per_point, k;
   PetscScalar  *u = NULL;
   TSAdapt      adapt;
   PetscBool    found;
