@@ -8,24 +8,22 @@
 
 static PetscErrorCode RHSFunction_spring_slider(TS ts, PetscReal t, Vec U, Vec F, void *ctx)
 {
-  PetscScalar       *f;
-  const PetscScalar *u;
-  PetscScalar       D, psi;
+  PetscScalar          *f;
+  const PetscScalar    *u;
+  double                D, psi, tau, V;
   DieterichRuinaAgeing* alwa = static_cast<DieterichRuinaAgeing*>(ctx);
-  double tau;
-  double V;
 
   PetscFunctionBeginUser;
   PetscCall(VecGetArrayRead(U, &u));
   PetscCall(VecGetArray(F, &f));
 
-  D = u[0];
-  psi = u[1];
-  tau = alwa->k * ((alwa->Vp * t + alwa->yield_point_init) - D);
+  D = (double)PetscRealPart(u[0]);
+  psi = (double)PetscRealPart(u[1]);
+  tau = alwa->k * ((alwa->Vp * ((double)t) + alwa->yield_point_init) - D);
   V = alwa->slip_rate(tau, psi);
 
-  f[0] = V;
-  f[1] = alwa->state_rhs(V, psi);
+  f[0] = (PetscScalar)V;
+  f[1] = (PetscScalar)alwa->state_rhs(V, psi);
 
   PetscCall(VecRestoreArrayRead(U, &u));
   PetscCall(VecRestoreArray(F, &f));
@@ -38,9 +36,9 @@ PetscErrorCode ts_soln_view(TS ts)
   Vec U;
   const PetscScalar *u;
   PetscInt step;
-  PetscScalar time;
-  void *ctx = NULL;
-  void *ctx_app = NULL;
+  PetscReal time;
+  double D, psi, V, tau;
+  void *ctx = NULL, *ctx_app = NULL;
   DieterichRuinaAgeing* alwa = NULL;
   std::ofstream  *out_file;
 
@@ -53,11 +51,11 @@ PetscErrorCode ts_soln_view(TS ts)
   PetscCall(TSGetTime(ts, &time));
   PetscCall(TSGetSolution(ts, &U));
   PetscCall(VecGetArrayRead(U, &u));
-  PetscScalar D = u[0];
-  PetscScalar psi = u[1];
-  double tau = alwa->k * (alwa->Vp * time - D);
-  double V = alwa->slip_rate(tau, psi);
-  (*out_file) << std::scientific << std::setprecision(4) << (double)time << "," << (double)D << "," << (double)psi << "," << V << "," << tau << std::endl;
+  D = (double)PetscRealPart(u[0]);
+  psi = (double)PetscRealPart(u[1]);
+  tau = alwa->k * (alwa->Vp * time - D);
+  V = alwa->slip_rate(tau, psi);
+  (*out_file) << std::scientific << std::setprecision(4) << (double)time << "," << D << "," << psi << "," << V << "," << tau << std::endl;
   PetscCall(VecRestoreArrayRead(U, &u));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -67,6 +65,14 @@ int main(int argc, char **argv)
 {
   DieterichRuinaAgeing alwa;
   std::ofstream out_file;
+  double       final_time, tau_init, psi_init;
+  TS           ts; /* ODE integrator */
+  Vec          U;  /* solution will be stored here */
+  PetscMPIInt  size;
+  PetscInt     n = 2;
+  PetscScalar  *u = NULL;
+  TSAdapt      adapt;
+
 
   PetscFunctionBeginUser;
   PetscCall(PetscInitialize(&argc, &argv, (char *)0, NULL));
@@ -87,9 +93,9 @@ int main(int argc, char **argv)
   alwa.k = std::stof(argv[10]);
   alwa.yield_point_init = std::stof(argv[11]);
 
-  double finle_time = std::stof(argv[12]);
-  double tau_init = alwa.k * alwa.yield_point_init;
-  double psi_init = alwa.psi_init(tau_init);
+  final_time = std::stof(argv[12]);
+  tau_init = alwa.k * alwa.yield_point_init;
+  psi_init = alwa.psi_init(tau_init);
 
   std::string out_file_name = argv[13];
 
@@ -105,7 +111,7 @@ int main(int argc, char **argv)
   std::cout << "Vp = " << alwa.Vp << std::endl;
   std::cout << "k = " << alwa.k << std::endl;
   std::cout << "Initial state:" << psi_init <<std::endl;
-  std::cout << "final_time = " << finle_time << std::endl;
+  std::cout << "final_time = " << final_time << std::endl;
 
   out_file.open(out_file_name);
   if (!out_file) {
@@ -113,13 +119,6 @@ int main(int argc, char **argv)
       return 1;
       }
   out_file << "t,D,psi,V,tau" << std::endl;
-
-  TS           ts; /* ODE integrator */
-  Vec          U;  /* solution will be stored here */
-  PetscMPIInt  size;
-  PetscInt     n = 2;
-  PetscScalar *u;
-  TSAdapt      adapt;
 
   PetscCallMPI(MPI_Comm_size(PETSC_COMM_WORLD, &size));
 
@@ -141,7 +140,7 @@ int main(int argc, char **argv)
 
   PetscCall(TSSetSolution(ts, U));
 
-  PetscCall(TSSetMaxTime(ts, finle_time));
+  PetscCall(TSSetMaxTime(ts, final_time));
   PetscCall(TSSetExactFinalTime(ts, TS_EXACTFINALTIME_STEPOVER));
   PetscCall(TSSetTimeStep(ts, 1.0e-10));
   /* The adaptive time step controller could take very
