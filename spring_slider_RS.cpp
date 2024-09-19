@@ -8,12 +8,32 @@
 
 #define DIM 2
 
+struct _p_Params {
+  DieterichRuinaAgeing *statelaw;
+  std::ofstream  *out_file;
+  int npoints;
+  double *V0;
+  double *b;
+  double *f0;
+  double *a;
+  double *eta;
+  double *L;
+  double *sn;
+  double *Vinit;
+  double *Vp;
+  double *k;
+  double *yield_point_init;
+};
+typedef struct _p_Params *Params;
+
 static PetscErrorCode RHSFunction_spring_slider_batch(TS ts, PetscReal t, Vec U, Vec F, void *ctx)
 {
   PetscScalar           *f;
   const PetscScalar     *u;
   double                D, psi, tau, V;
-  DieterichRuinaAgeing  *alwa = static_cast<DieterichRuinaAgeing*>(ctx);
+  Params                p = (Params)ctx;
+  DieterichRuinaAgeing  *alwa = p->statelaw;
+  //DieterichRuinaAgeing  *alwa = static_cast<DieterichRuinaAgeing*>(ctx);
   PetscInt              npoints, len, nvar_per_point, k;
 
   PetscFunctionBeginUser;
@@ -25,7 +45,6 @@ static PetscErrorCode RHSFunction_spring_slider_batch(TS ts, PetscReal t, Vec U,
   PetscCall(VecGetArray(F, &f));
 
   for (k=0; k<npoints; k++) {
-
     D = (double)PetscRealPart(u[nvar_per_point*k+0]);
     psi = (double)PetscRealPart(u[nvar_per_point*k+1]);
     tau = alwa->k * ((alwa->Vp * ((double)t) + alwa->yield_point_init) - D);
@@ -37,6 +56,8 @@ static PetscErrorCode RHSFunction_spring_slider_batch(TS ts, PetscReal t, Vec U,
 
   PetscCall(VecRestoreArrayRead(U, &u));
   PetscCall(VecRestoreArray(F, &f));
+  VecView(F,PETSC_VIEWER_STDOUT_WORLD);
+  //exit(0);
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -86,6 +107,7 @@ int main(int argc, char **argv)
   PetscReal    arg_r;
   char         fname[PETSC_MAX_PATH_LEN];
   MPI_Comm     comm;
+  Params       ctx = NULL;
 
   PetscFunctionBeginUser;
   PetscCall(PetscInitialize(&argc, &argv, (char *)0, NULL));
@@ -181,13 +203,44 @@ int main(int argc, char **argv)
 
   std::cout << "npoints = " << (int)npoints << std::endl;
 
+  //PetscCalloc1(1,&ctx);
+  PetscMalloc(sizeof(struct _p_Params),&ctx);
+  ctx->npoints = npoints;
+  ctx->statelaw = &alwa;
+  ctx->out_file = &out_file;
+
+  PetscCalloc1(npoints,&ctx->V0);
+  PetscCalloc1(npoints,&ctx->b);
+  PetscCalloc1(npoints,&ctx->f0);
+  PetscCalloc1(npoints,&ctx->a);
+  PetscCalloc1(npoints,&ctx->eta);
+  PetscCalloc1(npoints,&ctx->L);
+  PetscCalloc1(npoints,&ctx->sn);
+  PetscCalloc1(npoints,&ctx->Vinit);
+  PetscCalloc1(npoints,&ctx->Vp);
+  PetscCalloc1(npoints,&ctx->k);
+  PetscCalloc1(npoints,&ctx->yield_point_init);
+  for (k=0; k<npoints; k++) {
+    ctx->V0[k] = alwa.V0;
+    ctx->b[k] = alwa.b;
+    ctx->f0[k] = alwa.f0;
+    ctx->a[k] = alwa.a;
+    ctx->eta[k] = alwa.eta;
+    ctx->L[k] = alwa.L;
+    ctx->sn[k] = alwa.sn;
+    ctx->Vinit[k] = alwa.Vinit;
+    ctx->Vp[k] = alwa.Vp;
+    ctx->k[k] = alwa.k;
+    ctx->yield_point_init[k] = alwa.yield_point_init;
+  }
 
   PetscCall(TSCreate(comm, &ts));
   PetscCall(TSSetType(ts, TSRK));
   PetscCall(TSSetProblemType(ts, TS_NONLINEAR));
 
   PetscCall(TSSetApplicationContext(ts, static_cast<void*>(&out_file)));
-  PetscCall(TSSetRHSFunction(ts, NULL, RHSFunction_spring_slider_batch, static_cast<void*>(&alwa)));
+  //PetscCall(TSSetRHSFunction(ts, NULL, RHSFunction_spring_slider_batch, static_cast<void*>(&alwa)));
+  PetscCall(TSSetRHSFunction(ts, NULL, RHSFunction_spring_slider_batch, static_cast<void*>(ctx)));
 
   /* initial condition */
   PetscCall(VecCreate(comm, &U));

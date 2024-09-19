@@ -9,7 +9,7 @@
 #include <exception>
 #include <iostream>
 
-#include <math.h> 
+#include <math.h>
 
 
 class DieterichRuinaAgeing {
@@ -30,7 +30,7 @@ public:
 
 
 
-    
+
 
     double psi_init(double tau) const {
         if (Vinit == 0.0) {
@@ -62,10 +62,10 @@ public:
             std::cout << "sigma_n = " << sn << std::endl
                         << "|tau| = " << tau << std::endl
                         << "psi = " << psi << std::endl
-                        << "L = " << a << std::endl
-                        << "U = " << b << std::endl
-                        << "F(L) = " << fF(a) << std::endl
-                        << "F(U) = " << fF(b) << std::endl;
+                        << "L = " << alpha << std::endl
+                        << "U = " << beta << std::endl
+                        << "F(L) = " << fF(alpha) << std::endl
+                        << "F(U) = " << fF(beta) << std::endl;
             throw;
 
         }
@@ -76,7 +76,7 @@ public:
         return b * V0 / L * (exp((f0 - psi) / b) - V / V0);
     }
 
-   
+
 
 
 //private:

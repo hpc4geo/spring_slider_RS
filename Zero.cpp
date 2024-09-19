@@ -8,7 +8,7 @@
 
 
 void function_nan_inf(double x, double Fx) noexcept {
-    printf("NaN or Inf detected: F(x) = %lf with x = %lf", Fx, x);
+    printf("NaN or Inf detected: F(x) = %lf with x = %lf\n", Fx, x);
 }
 
 double zeroIn(double a, double b, std::function<double(double)> F, double tol) {
@@ -103,4 +103,3 @@ double zeroIn(double a, double b, std::function<double(double)> F, double tol) {
     }
     return b;
 }
-
