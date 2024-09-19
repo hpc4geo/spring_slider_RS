@@ -6,24 +6,34 @@
 
 #include "DieterichRuinaAgeing.h"
 
-static PetscErrorCode RHSFunction_spring_slider(TS ts, PetscReal t, Vec U, Vec F, void *ctx)
+#define DIM 2
+
+static PetscErrorCode RHSFunction_spring_slider_batch(TS ts, PetscReal t, Vec U, Vec F, void *ctx)
 {
-  PetscScalar          *f;
-  const PetscScalar    *u;
+  PetscScalar           *f;
+  const PetscScalar     *u;
   double                D, psi, tau, V;
-  DieterichRuinaAgeing* alwa = static_cast<DieterichRuinaAgeing*>(ctx);
+  DieterichRuinaAgeing  *alwa = static_cast<DieterichRuinaAgeing*>(ctx);
+  PetscInt              npoints, len, nvar_per_point, k;
 
   PetscFunctionBeginUser;
+  PetscCall(VecGetLocalSize(U,&len));
+  nvar_per_point = (DIM -1) + 1;
+  npoints = len / nvar_per_point;
+
   PetscCall(VecGetArrayRead(U, &u));
   PetscCall(VecGetArray(F, &f));
 
-  D = (double)PetscRealPart(u[0]);
-  psi = (double)PetscRealPart(u[1]);
-  tau = alwa->k * ((alwa->Vp * ((double)t) + alwa->yield_point_init) - D);
-  V = alwa->slip_rate(tau, psi);
+  for (k=0; k<npoints; k++) {
 
-  f[0] = (PetscScalar)V;
-  f[1] = (PetscScalar)alwa->state_rhs(V, psi);
+    D = (double)PetscRealPart(u[nvar_per_point*k+0]);
+    psi = (double)PetscRealPart(u[nvar_per_point*k+1]);
+    tau = alwa->k * ((alwa->Vp * ((double)t) + alwa->yield_point_init) - D);
+    V = alwa->slip_rate(tau, psi);
+
+    f[nvar_per_point*k+0] = (PetscScalar)V;
+    f[nvar_per_point*k+1] = (PetscScalar)alwa->state_rhs(V, psi);
+  }
 
   PetscCall(VecRestoreArrayRead(U, &u));
   PetscCall(VecRestoreArray(F, &f));
@@ -69,7 +79,7 @@ int main(int argc, char **argv)
   TS           ts; /* ODE integrator */
   Vec          U;  /* solution will be stored here */
   PetscMPIInt  commsize;
-  PetscInt     n = 2;
+  PetscInt     npoints = 1, len, nvar_per_point, k, d;
   PetscScalar  *u = NULL;
   TSAdapt      adapt;
   PetscBool    found;
@@ -145,6 +155,11 @@ int main(int argc, char **argv)
   }
   out_file << "t,D,psi,V,tau" << std::endl;
 
+  npoints = 1;
+  found = PETSC_FALSE; PetscOptionsGetInt(NULL,NULL,"-npoints",&npoints,&found);
+  if (!found) { SETERRQ(comm,PETSC_ERR_SUP,"Require value be provided for -npoints"); }
+
+
   tau_init = alwa.k * alwa.yield_point_init;
   psi_init = alwa.psi_init(tau_init);
 
@@ -162,24 +177,32 @@ int main(int argc, char **argv)
   std::cout << "Initial state:" << psi_init <<std::endl;
   std::cout << "final_time = " << final_time << std::endl;
 
+  std::cout << "npoints = " << (int)npoints << std::endl;
+
+
   PetscCall(TSCreate(comm, &ts));
   PetscCall(TSSetType(ts, TSRK));
   PetscCall(TSSetProblemType(ts, TS_NONLINEAR));
 
   PetscCall(TSSetApplicationContext(ts, static_cast<void*>(&out_file)));
-  PetscCall(TSSetRHSFunction(ts, NULL, RHSFunction_spring_slider, static_cast<void*>(&alwa)));
+  PetscCall(TSSetRHSFunction(ts, NULL, RHSFunction_spring_slider_batch, static_cast<void*>(&alwa)));
 
   /* initial condition */
   PetscCall(VecCreate(comm, &U));
-  PetscCall(VecSetSizes(U, n, PETSC_DETERMINE));
+  PetscCall(VecSetSizes(U, ((DIM -1) + 1) * npoints, PETSC_DETERMINE)); // slip-rate + state
+  PetscCall(VecSetFromOptions(U));
   PetscCall(VecSetUp(U));
+
+  PetscCall(VecGetLocalSize(U,&len));
+  nvar_per_point = (DIM -1) + 1;
   PetscCall(VecGetArray(U, &u));
-  u[0] = 0.0;
-  u[1] = psi_init;
+  for (k=0; k<npoints; k++) {
+    u[nvar_per_point * k + 0] = 0.0;
+    u[nvar_per_point * k + 1] = psi_init;
+  }
   PetscCall(VecRestoreArray(U, &u));
 
   PetscCall(TSSetSolution(ts, U));
-
   PetscCall(TSSetMaxTime(ts, final_time));
   PetscCall(TSSetExactFinalTime(ts, TS_EXACTFINALTIME_STEPOVER));
   PetscCall(TSSetTimeStep(ts, 1.0e-10));
@@ -195,6 +218,8 @@ int main(int argc, char **argv)
   PetscCall(TSSetUp(ts));
 
   PetscCall(TSSolve(ts, U));
+
+  VecView(U,PETSC_VIEWER_STDOUT_(comm));
 
   PetscCall(VecDestroy(&U));
   PetscCall(TSDestroy(&ts));
