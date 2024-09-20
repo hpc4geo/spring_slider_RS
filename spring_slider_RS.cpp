@@ -5,26 +5,10 @@
 #include <iomanip>
 
 #include "DieterichRuinaAgeing.h"
+#include "params.h"
 
 #define DIM 2
 
-struct _p_Params {
-  DieterichRuinaAgeing *statelaw;
-  std::ofstream  *out_file;
-  int npoints;
-  double *V0;
-  double *b;
-  double *f0;
-  double *a;
-  double *eta;
-  double *L;
-  double *sn;
-  double *Vinit;
-  double *Vp;
-  double *k;
-  double *yield_point_init;
-};
-typedef struct _p_Params *Params;
 
 void pack_vals(DieterichRuinaAgeing *law, Params p, int idx)
 {
@@ -49,14 +33,15 @@ static PetscErrorCode RHSFunction_spring_slider_batch(TS ts, PetscReal t, Vec U,
   Params                p = (Params)ctx;
   DieterichRuinaAgeing  *alwa = p->statelaw;
   PetscInt              npoints, len, nvar_per_point, k;
+  PetscMemType mt_f,mt_u;
 
   PetscFunctionBeginUser;
   PetscCall(VecGetLocalSize(U,&len));
   nvar_per_point = (DIM -1) + 1;
   npoints = len / nvar_per_point;
 
-  PetscCall(VecGetArrayRead(U, &u));
-  PetscCall(VecGetArray(F, &f));
+  PetscCall(VecGetArrayReadAndMemType(U, &u, &mt_u));
+  PetscCall(VecGetArrayAndMemType(F, &f, &mt_f));
 
   for (k=0; k<npoints; k++) {
     D = (double)PetscRealPart(u[nvar_per_point*k+0]);
@@ -71,8 +56,8 @@ static PetscErrorCode RHSFunction_spring_slider_batch(TS ts, PetscReal t, Vec U,
     f[nvar_per_point*k+1] = (PetscScalar)alwa->state_rhs(V, psi);
   }
 
-  PetscCall(VecRestoreArrayRead(U, &u));
-  PetscCall(VecRestoreArray(F, &f));
+  PetscCall(VecRestoreArrayReadAndMemType(U, &u));
+  PetscCall(VecRestoreArrayAndMemType(F, &f));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
