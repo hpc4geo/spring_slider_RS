@@ -24,8 +24,11 @@ FPPFLAGS =
 #  This can be built by uncommenting the following two lines.
 #
 
-app : spring_slider_RS.o Zero.o
+app : spring_slider_RS.o Zero.o residual.o
 	$(LINK.C) -o $@ $^ $(LDLIBS)
+
+residual.o : residual.hip
+	hipcc $(HIPC_FLAGS) -c residual.hip $(PETSC_CC_INCLUDES)
 
 #
 #  When linking in a multi-files with Fortran source files a.F90, b.c, and c.cxx

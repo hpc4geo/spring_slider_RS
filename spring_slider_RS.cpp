@@ -238,17 +238,11 @@ int main(int argc, char **argv)
     ctx->yield_point_init[k] = alwa.yield_point_init;
   }
 
-  PetscCall(TSCreate(comm, &ts));
-  PetscCall(TSSetType(ts, TSRK));
-  PetscCall(TSSetProblemType(ts, TS_NONLINEAR));
-
-  PetscCall(TSSetApplicationContext(ts, static_cast<void*>(&out_file)));
-  //PetscCall(TSSetRHSFunction(ts, NULL, RHSFunction_spring_slider_batch, static_cast<void*>(&alwa)));
-  PetscCall(TSSetRHSFunction(ts, NULL, RHSFunction_spring_slider_batch, static_cast<void*>(ctx)));
 
   /* initial condition */
   PetscCall(VecCreate(comm, &U));
   PetscCall(VecSetSizes(U, ((DIM -1) + 1) * npoints, PETSC_DETERMINE)); // slip-rate + state
+  PetscCall(VecSetType(U, "standard"));
   PetscCall(VecSetFromOptions(U));
   PetscCall(VecSetUp(U));
 
@@ -265,6 +259,20 @@ int main(int argc, char **argv)
     u[nvar_per_point * k + 1] = psi_init;
   }
   PetscCall(VecRestoreArray(U, &u));
+
+
+
+
+
+
+
+  PetscCall(TSCreate(comm, &ts));
+  PetscCall(TSSetType(ts, TSRK));
+  PetscCall(TSSetProblemType(ts, TS_NONLINEAR));
+
+  PetscCall(TSSetApplicationContext(ts, static_cast<void*>(&out_file)));
+  //PetscCall(TSSetRHSFunction(ts, NULL, RHSFunction_spring_slider_batch, static_cast<void*>(&alwa)));
+  PetscCall(TSSetRHSFunction(ts, NULL, RHSFunction_spring_slider_batch, static_cast<void*>(ctx)));
 
   PetscCall(TSSetSolution(ts, U));
   PetscCall(TSSetMaxTime(ts, final_time));
