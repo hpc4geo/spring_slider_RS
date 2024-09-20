@@ -8,8 +8,7 @@ hipcc -c residual.hip -I/users/maydave2/software/petsc-3.21.5/include -I/users/m
 #include "DieterichRuinaAgeing.h"
 #include "params.h"
 
-//#include "Zero_hip.h"
-
+#define HCC_ENABLE_PRINTF
 
 #define DIM 2
 
@@ -200,24 +199,35 @@ static __global__ void rs_batch_kernel(
   int nvar_per_point = (DIM-1) + 1;
 
   if (k > npoints) return;
+  printf("tindex %d\n",k);
 
     D = (double)PetscRealPart(u[nvar_per_point*k+0]);
     psi = (double)PetscRealPart(u[nvar_per_point*k+1]);
 
+    printf("    d_alwa %p | d_p %p \n",law, p);
+
+    printf("p->V0[k] %+1.10e\n",p->V0[k]);
+
+#if 0
     // pack
     pack_vals_hip(law, p, k);
+//#if 0
 
     tau = law->k * ((law->Vp * ((double)time) + law->yield_point_init) - D);
     V = law_slip_rate(tau, psi, law);
 
     f[nvar_per_point*k+0] = (PetscScalar)V;
     f[nvar_per_point*k+1] = (PetscScalar)law_state_rhs(V, psi, law);  
+#endif
 }
 
 extern "C" {
 
-#define GRID_MAX 1024
-#define THREAD_MAX 1024
+long int printd3(dim3 *b) {
+  printf("(%ld %ld %ld) -> max items %ld\n",(long)b->x,(long)b->y,(long)b->z, (long)b->x*b->y*b->z);
+  return (long int)b->x*b->y*b->z;
+}
+
 
 void build_sizes(long int N,dim3 *b, dim3 *t)
 {
@@ -273,17 +283,40 @@ PetscErrorCode RHSFunction_spring_slider_batch_hip(TS ts, PetscReal t, Vec U, Ve
   nvar_per_point = (DIM -1) + 1;
   npoints = len / nvar_per_point;
 
-  PetscCall(VecHIPGetArrayRead(U, &u));
-  PetscCall(VecHIPGetArray(F, &f));
 
   dim3 blocks, threads;
   build_sizes(len, &blocks, &threads);
+  {
+    long int bm,tm;
+    printf("blocks "); bm = printd3(&blocks);
+    printf("threads "); tm = printd3(&threads);
+    printf("max %ld | N %ld\n",bm * tm,(long int)len);
 
-  rs_batch_kernel<<< blocks, threads >>>(t, alwa, npoints, p, u, f );
+  }
+  
+  PetscCall(VecHIPGetArrayRead(U, &u));
+  PetscCall(VecHIPGetArray(F, &f));
+
+  alwa = p->statelaw;
+
+  DieterichRuinaAgeing  *d_alwa;
+  Params                d_p;
+
+  ierr = hipMalloc(&d_alwa, sizeof(DieterichRuinaAgeing*));
+  ierr = hipMemcpy(d_alwa, alwa, sizeof(DieterichRuinaAgeing*), hipMemcpyHostToDevice);
+
+  ierr = hipMalloc(&d_p, sizeof(Params));
+  ierr = hipMemcpy(d_p, p, sizeof(Params), hipMemcpyHostToDevice);
+
+  printf("alwa %p | p %p \n",alwa, p);
+  rs_batch_kernel<<< blocks, threads >>>(t, d_alwa, npoints, d_p, u, f );
 
   PetscCall(VecHIPRestoreArrayRead(U, &u));
   PetscCall(VecHIPRestoreArray(F, &f));
   ierr = hipDeviceSynchronize();
+
+  ierr = hipFree(d_alwa);
+  ierr = hipFree(d_p);
 
   PetscFunctionReturn(PETSC_SUCCESS);
 }

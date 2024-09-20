@@ -1,14 +1,25 @@
+/*
+
+make -f Makefile.basic.user app PETSC_DIR=/projappl/project_465001082/dmay/software/petsc-dev-git PETSC_ARCH=arch-cray-c-debug-rocm-hip-tandem-vanil
+
+salloc --account=project_465001082 --partition=dev-g --nodes=1 --ntasks-per-node=1 --gpus-per-node=1 --time=00:10:00
+
+srun ./app -V0 1e-06 -f0 0.6 -a 0.015 -b 0.02 -eta 4500000.0 -L 0.1 -sn 50000000.0 -Vinit 1e-09 -Vp 1e-08 -k 500000 -yield_point_init 10 -output out.txt -final_time 15768000000.0 -npoints 1 -vec_type hip -device_view
+*/
+
 
 #include <petscdm.h>
 #include <petsc/private/tsimpl.h>
 #include <fstream>
 #include <iomanip>
+#include <hip/hip_runtime.h>
 
 #include "DieterichRuinaAgeing.h"
 #include "params.h"
 
 #define DIM 2
 
+extern "C" PetscErrorCode RHSFunction_spring_slider_batch_hip(TS ts, PetscReal t, Vec U, Vec F, void *ctx);
 
 void pack_vals(DieterichRuinaAgeing *law, Params p, int idx)
 {
@@ -238,7 +249,41 @@ int main(int argc, char **argv)
     ctx->yield_point_init[k] = alwa.yield_point_init;
   }
 
+  int ierr;
+  size_t nbytes = sizeof(double)*npoints;
+  ierr = hipMalloc(&ctx->d_yield_point_init, nbytes);
+  ierr = hipMemcpy(ctx->d_yield_point_init, ctx->yield_point_init, nbytes, hipMemcpyHostToDevice);
 
+  ierr = hipMalloc(&ctx->d_k, nbytes);
+  ierr = hipMemcpy(ctx->d_k, ctx->k, nbytes, hipMemcpyHostToDevice);
+
+  ierr = hipMalloc(&ctx->d_Vp, nbytes);
+  ierr = hipMemcpy(ctx->d_Vp, ctx->Vp, nbytes, hipMemcpyHostToDevice);
+
+  ierr = hipMalloc(&ctx->d_Vinit, nbytes);
+  ierr = hipMemcpy(ctx->d_Vinit, ctx->Vinit, nbytes, hipMemcpyHostToDevice);
+
+  ierr = hipMalloc(&ctx->d_sn, nbytes);
+  ierr = hipMemcpy(ctx->d_sn, ctx->sn, nbytes, hipMemcpyHostToDevice);
+
+  ierr = hipMalloc(&ctx->d_L, nbytes);
+  ierr = hipMemcpy(ctx->d_L, ctx->L, nbytes, hipMemcpyHostToDevice);
+
+  ierr = hipMalloc(&ctx->d_eta, nbytes);
+  ierr = hipMemcpy(ctx->d_eta, ctx->eta, nbytes, hipMemcpyHostToDevice);
+
+  ierr = hipMalloc(&ctx->d_a, nbytes);
+  ierr = hipMemcpy(ctx->d_a, ctx->a, nbytes, hipMemcpyHostToDevice);
+
+  ierr = hipMalloc(&ctx->d_f0, nbytes);
+  ierr = hipMemcpy(ctx->d_f0, ctx->f0, nbytes, hipMemcpyHostToDevice);
+
+  ierr = hipMalloc(&ctx->d_b, nbytes);
+  ierr = hipMemcpy(ctx->d_b, ctx->b, nbytes, hipMemcpyHostToDevice);
+
+  ierr = hipMalloc(&ctx->d_V0, nbytes);
+  ierr = hipMemcpy(ctx->d_V0, ctx->V0, nbytes, hipMemcpyHostToDevice);
+  
   /* initial condition */
   PetscCall(VecCreate(comm, &U));
   PetscCall(VecSetSizes(U, ((DIM -1) + 1) * npoints, PETSC_DETERMINE)); // slip-rate + state
@@ -271,8 +316,18 @@ int main(int argc, char **argv)
   PetscCall(TSSetProblemType(ts, TS_NONLINEAR));
 
   PetscCall(TSSetApplicationContext(ts, static_cast<void*>(&out_file)));
-  //PetscCall(TSSetRHSFunction(ts, NULL, RHSFunction_spring_slider_batch, static_cast<void*>(&alwa)));
-  PetscCall(TSSetRHSFunction(ts, NULL, RHSFunction_spring_slider_batch, static_cast<void*>(ctx)));
+  
+    {
+        PetscBool isseq;
+        PetscCall(PetscObjectTypeCompare((PetscObject)U,"seq",&isseq));
+        if (isseq) {
+	    PetscCall(TSSetRHSFunction(ts, NULL, RHSFunction_spring_slider_batch, static_cast<void*>(ctx)));
+	} else {
+                PetscCall(TSSetRHSFunction(ts, NULL, RHSFunction_spring_slider_batch_hip, static_cast<void*>(ctx)));
+
+   // 		PetscCall(TSSetRHSFunction(ts, NULL, RHSFunction_spring_slider_batch_hip, NULL));
+	}
+  }  
 
   PetscCall(TSSetSolution(ts, U));
   PetscCall(TSSetMaxTime(ts, final_time));
@@ -283,7 +338,7 @@ int main(int argc, char **argv)
   PetscCall(TSGetAdapt(ts, &adapt));
   PetscCall(TSAdaptSetStepLimits(adapt, 0.0, 2000000.0));
 
-  PetscCall(TSSetPostStep(ts, ts_soln_view));
+  //PetscCall(TSSetPostStep(ts, ts_soln_view));
 
   PetscCall(TSSetFromOptions(ts));
 
