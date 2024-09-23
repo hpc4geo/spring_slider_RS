@@ -21,7 +21,7 @@ srun ./app -V0 1e-06 -f0 0.6 -a 0.015 -b 0.02 -eta 4500000.0 -L 0.1 -sn 50000000
 
 extern "C" PetscErrorCode RHSFunction_spring_slider_batch_hip(TS ts, PetscReal t, Vec U, Vec F, void *ctx);
 
-void pack_vals(DieterichRuinaAgeing *law, Params p, int idx)
+void pack_vals(DieterichRuinaAgeing *law, Params *p, int idx)
 {
   law->V0    = p->V0[idx];
   law->b     = p->b[idx];
