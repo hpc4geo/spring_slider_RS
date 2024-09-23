@@ -124,7 +124,7 @@ int main(int argc, char **argv)
   PetscReal    arg_r;
   char         fname[PETSC_MAX_PATH_LEN];
   MPI_Comm     comm;
-  Context      ctx = NULL;
+  Context      *ctx = NULL;
 
   PetscFunctionBeginUser;
   PetscCall(PetscInitialize(&argc, &argv, (char *)0, NULL));
