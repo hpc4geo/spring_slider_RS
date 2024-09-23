@@ -188,7 +188,7 @@ __device__ __inline__ double law_slip_rate(double tau, double psi, DieterichRuin
 
 static __global__ void rs_batch_kernel(
   PetscReal time,
-  DieterichRuinaAgeing *law,
+  DieterichRuinaAgeing law,
   int npoints,
   Params p,
   const PetscScalar *u,
@@ -204,13 +204,13 @@ static __global__ void rs_batch_kernel(
     D = (double)PetscRealPart(u[nvar_per_point*k+0]);
     psi = (double)PetscRealPart(u[nvar_per_point*k+1]);
 
-    printf("    d_alwa %p | d_p %p \n",law, p);
+    //printf("    d_alwa %p | d_p %p \n",law, p);
 
-    printf("p->V0[k] %+1.10e\n",p->V0[k]);
+    printf("p->V0[k] %+1.10e\n",p.V0[k]);
 
 #if 0
     // pack
-    pack_vals_hip(law, p, k);
+    pack_vals_hip(&law, &p, k);
 //#if 0
 
     tau = law->k * ((law->Vp * ((double)time) + law->yield_point_init) - D);
@@ -273,9 +273,10 @@ PetscErrorCode RHSFunction_spring_slider_batch_hip(TS ts, PetscReal t, Vec U, Ve
   PetscScalar           *f;
   const PetscScalar     *u;
   double                D, psi, tau, V;
-  Params                p = (Params)ctx;
-  DieterichRuinaAgeing  *alwa = p->statelaw;
+  Context               *c = (Context*)ctx;
+  DieterichRuinaAgeing  *alwa = c->statelaw;
   PetscInt              npoints, len, nvar_per_point, k;
+  Params                *params_h,*params_d;
   int ierr;
 
   PetscFunctionBeginUser;
@@ -297,26 +298,14 @@ PetscErrorCode RHSFunction_spring_slider_batch_hip(TS ts, PetscReal t, Vec U, Ve
   PetscCall(VecHIPGetArrayRead(U, &u));
   PetscCall(VecHIPGetArray(F, &f));
 
-  alwa = p->statelaw;
+  params_h = c->host;
+  params_d = c->device;
 
-  DieterichRuinaAgeing  *d_alwa;
-  Params                d_p;
-
-  ierr = hipMalloc(&d_alwa, sizeof(DieterichRuinaAgeing*));
-  ierr = hipMemcpy(d_alwa, alwa, sizeof(DieterichRuinaAgeing*), hipMemcpyHostToDevice);
-
-  ierr = hipMalloc(&d_p, sizeof(Params));
-  ierr = hipMemcpy(d_p, p, sizeof(Params), hipMemcpyHostToDevice);
-
-  printf("alwa %p | p %p \n",alwa, p);
-  rs_batch_kernel<<< blocks, threads >>>(t, d_alwa, npoints, d_p, u, f );
+  rs_batch_kernel<<< blocks, threads >>>(t, *alwa, npoints, *params_d, u, f );
 
   PetscCall(VecHIPRestoreArrayRead(U, &u));
   PetscCall(VecHIPRestoreArray(F, &f));
   ierr = hipDeviceSynchronize();
-
-  ierr = hipFree(d_alwa);
-  ierr = hipFree(d_p);
 
   PetscFunctionReturn(PETSC_SUCCESS);
 }
