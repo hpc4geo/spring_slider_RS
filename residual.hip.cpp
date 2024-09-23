@@ -139,7 +139,7 @@ __device__ __inline__ double zeroIn_hip(double a, double b, DieterichRuinaAgeing
 }
 
 
-__device__ __inline__ void pack_vals_hip(DieterichRuinaAgeing *law, Params p, int idx)
+__device__ __inline__ void pack_vals_hip(DieterichRuinaAgeing *law, Params *p, int idx)
 {
   law->V0    = p->V0[idx];
   law->b     = p->b[idx];
@@ -217,7 +217,7 @@ static __global__ void rs_batch_kernel(
     V = law_slip_rate(tau, psi, law);
 
     f[nvar_per_point*k+0] = (PetscScalar)V;
-    f[nvar_per_point*k+1] = (PetscScalar)law_state_rhs(V, psi, law);  
+    f[nvar_per_point*k+1] = (PetscScalar)law_state_rhs(V, psi, law);
 #endif
 }
 
@@ -293,7 +293,7 @@ PetscErrorCode RHSFunction_spring_slider_batch_hip(TS ts, PetscReal t, Vec U, Ve
     printf("max %ld | N %ld\n",bm * tm,(long int)len);
 
   }
-  
+
   PetscCall(VecHIPGetArrayRead(U, &u));
   PetscCall(VecHIPGetArray(F, &f));
 
