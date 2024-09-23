@@ -27,8 +27,8 @@ FPPFLAGS =
 app : spring_slider_RS.o Zero.o residual.o
 	$(LINK.C) -o $@ $^ $(LDLIBS)
 
-residual.o : residual.hip
-	hipcc $(HIPC_FLAGS) -c residual.hip $(PETSC_CC_INCLUDES)
+residual.o : residual.hip.cpp
+	hipcc $(HIPC_FLAGS) -c residual.hip.cpp $(PETSC_CC_INCLUDES)
 
 #
 #  When linking in a multi-files with Fortran source files a.F90, b.c, and c.cxx
