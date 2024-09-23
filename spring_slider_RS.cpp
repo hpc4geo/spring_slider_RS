@@ -41,18 +41,18 @@ static PetscErrorCode RHSFunction_spring_slider_batch(TS ts, PetscReal t, Vec U,
   PetscScalar           *f;
   const PetscScalar     *u;
   double                D, psi, tau, V;
-  Params                p = (Params)ctx;
-  DieterichRuinaAgeing  *alwa = p->statelaw;
+  Context               *c = (Context*)ctx;
+  DieterichRuinaAgeing  *alwa = c->statelaw;
   PetscInt              npoints, len, nvar_per_point, k;
-  PetscMemType mt_f,mt_u;
+  Params                *p = c->host;
 
   PetscFunctionBeginUser;
   PetscCall(VecGetLocalSize(U,&len));
   nvar_per_point = (DIM -1) + 1;
   npoints = len / nvar_per_point;
 
-  PetscCall(VecGetArrayReadAndMemType(U, &u, &mt_u));
-  PetscCall(VecGetArrayAndMemType(F, &f, &mt_f));
+  PetscCall(VecGetArrayRead(U, &u));
+  PetscCall(VecGetArray(F, &f));
 
   for (k=0; k<npoints; k++) {
     D = (double)PetscRealPart(u[nvar_per_point*k+0]);
@@ -67,8 +67,8 @@ static PetscErrorCode RHSFunction_spring_slider_batch(TS ts, PetscReal t, Vec U,
     f[nvar_per_point*k+1] = (PetscScalar)alwa->state_rhs(V, psi);
   }
 
-  PetscCall(VecRestoreArrayReadAndMemType(U, &u));
-  PetscCall(VecRestoreArrayAndMemType(F, &f));
+  PetscCall(VecRestoreArrayRead(U, &u));
+  PetscCall(VecRestoreArray(F, &f));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -81,7 +81,8 @@ PetscErrorCode ts_soln_view(TS ts)
   PetscReal time;
   double D, psi, V, tau;
   void *ctx = NULL, *ctx_app = NULL;
-  Params               p = NULL;
+  Context              *c;
+  Params               *p = NULL;
   DieterichRuinaAgeing *alwa = NULL;
   std::ofstream        *out_file;
 
@@ -89,8 +90,9 @@ PetscErrorCode ts_soln_view(TS ts)
   PetscCall(TSGetApplicationContext(ts,&ctx_app));
   out_file = static_cast<std::ofstream*>(ctx_app);
   PetscCall(TSGetRHSFunction(ts, NULL, NULL, &ctx));
-  p = (Params)ctx;
-  alwa = p->statelaw;
+  c = (Context*)ctx;
+  alwa = c->statelaw;
+  p = c->host;
   pack_vals(alwa, p, 0);
 
   PetscCall(TSGetStepNumber(ts, &step));
@@ -122,7 +124,7 @@ int main(int argc, char **argv)
   PetscReal    arg_r;
   char         fname[PETSC_MAX_PATH_LEN];
   MPI_Comm     comm;
-  Params       ctx = NULL;
+  Context      ctx = NULL;
 
   PetscFunctionBeginUser;
   PetscCall(PetscInitialize(&argc, &argv, (char *)0, NULL));
@@ -219,71 +221,74 @@ int main(int argc, char **argv)
   std::cout << "npoints = " << (int)npoints << std::endl;
 
   //PetscCalloc1(1,&ctx);
-  PetscMalloc(sizeof(struct _p_Params),&ctx);
-  ctx->npoints = npoints;
+  PetscMalloc(sizeof(struct _p_Context),&ctx);
   ctx->statelaw = &alwa;
   ctx->out_file = &out_file;
 
-  PetscCalloc1(npoints,&ctx->V0);
-  PetscCalloc1(npoints,&ctx->b);
-  PetscCalloc1(npoints,&ctx->f0);
-  PetscCalloc1(npoints,&ctx->a);
-  PetscCalloc1(npoints,&ctx->eta);
-  PetscCalloc1(npoints,&ctx->L);
-  PetscCalloc1(npoints,&ctx->sn);
-  PetscCalloc1(npoints,&ctx->Vinit);
-  PetscCalloc1(npoints,&ctx->Vp);
-  PetscCalloc1(npoints,&ctx->k);
-  PetscCalloc1(npoints,&ctx->yield_point_init);
+  PetscMalloc(sizeof(struct _p_Params),&ctx->host);
+  ctx->host->npoints = npoints;
+  PetscCalloc1(npoints,&ctx->host->V0);
+  PetscCalloc1(npoints,&ctx->host->b);
+  PetscCalloc1(npoints,&ctx->host->f0);
+  PetscCalloc1(npoints,&ctx->host->a);
+  PetscCalloc1(npoints,&ctx->host->eta);
+  PetscCalloc1(npoints,&ctx->host->L);
+  PetscCalloc1(npoints,&ctx->host->sn);
+  PetscCalloc1(npoints,&ctx->host->Vinit);
+  PetscCalloc1(npoints,&ctx->host->Vp);
+  PetscCalloc1(npoints,&ctx->host->k);
+  PetscCalloc1(npoints,&ctx->host->yield_point_init);
   for (k=0; k<npoints; k++) {
-    ctx->V0[k] = alwa.V0;
-    ctx->b[k] = alwa.b;
-    ctx->f0[k] = alwa.f0;
-    ctx->a[k] = alwa.a;
-    ctx->eta[k] = alwa.eta;
-    ctx->L[k] = alwa.L;
-    ctx->sn[k] = alwa.sn;
-    ctx->Vinit[k] = alwa.Vinit;
-    ctx->Vp[k] = alwa.Vp;
-    ctx->k[k] = alwa.k;
-    ctx->yield_point_init[k] = alwa.yield_point_init;
+    ctx->host->V0[k] = alwa.V0;
+    ctx->host->b[k] = alwa.b;
+    ctx->host->f0[k] = alwa.f0;
+    ctx->host->a[k] = alwa.a;
+    ctx->host->eta[k] = alwa.eta;
+    ctx->host->L[k] = alwa.L;
+    ctx->host->sn[k] = alwa.sn;
+    ctx->host->Vinit[k] = alwa.Vinit;
+    ctx->host->Vp[k] = alwa.Vp;
+    ctx->host->k[k] = alwa.k;
+    ctx->host->yield_point_init[k] = alwa.yield_point_init;
   }
 
   int ierr;
   size_t nbytes = sizeof(double)*npoints;
-  ierr = hipMalloc(&ctx->d_yield_point_init, nbytes);
-  ierr = hipMemcpy(ctx->d_yield_point_init, ctx->yield_point_init, nbytes, hipMemcpyHostToDevice);
+  PetscMalloc(sizeof(struct _p_Params),&ctx->device);
+  ctx->device->npoints = ctx->host->npoints;
+  ierr = hipMalloc(&ctx->device->yield_point_init, nbytes);
+  ierr = hipMemcpy(ctx->device->yield_point_init, ctx->host->yield_point_init, nbytes, hipMemcpyHostToDevice);
 
-  ierr = hipMalloc(&ctx->d_k, nbytes);
-  ierr = hipMemcpy(ctx->d_k, ctx->k, nbytes, hipMemcpyHostToDevice);
+  ierr = hipMalloc(&ctx->device->k, nbytes);
+  ierr = hipMemcpy(ctx->device->k, ctx->host->k, nbytes, hipMemcpyHostToDevice);
 
-  ierr = hipMalloc(&ctx->d_Vp, nbytes);
-  ierr = hipMemcpy(ctx->d_Vp, ctx->Vp, nbytes, hipMemcpyHostToDevice);
+  ierr = hipMalloc(&ctx->device->Vp, nbytes);
+  ierr = hipMemcpy(ctx->device->Vp, ctx->host->Vp, nbytes, hipMemcpyHostToDevice);
 
-  ierr = hipMalloc(&ctx->d_Vinit, nbytes);
-  ierr = hipMemcpy(ctx->d_Vinit, ctx->Vinit, nbytes, hipMemcpyHostToDevice);
+  ierr = hipMalloc(&ctx->device->Vinit, nbytes);
+  ierr = hipMemcpy(ctx->device->Vinit, ctx->host->Vinit, nbytes, hipMemcpyHostToDevice);
 
-  ierr = hipMalloc(&ctx->d_sn, nbytes);
-  ierr = hipMemcpy(ctx->d_sn, ctx->sn, nbytes, hipMemcpyHostToDevice);
+  ierr = hipMalloc(&ctx->device->sn, nbytes);
+  ierr = hipMemcpy(ctx->device->sn, ctx->host->sn, nbytes, hipMemcpyHostToDevice);
 
-  ierr = hipMalloc(&ctx->d_L, nbytes);
-  ierr = hipMemcpy(ctx->d_L, ctx->L, nbytes, hipMemcpyHostToDevice);
+  ierr = hipMalloc(&ctx->device->L, nbytes);
+  ierr = hipMemcpy(ctx->device->L, ctx->host->L, nbytes, hipMemcpyHostToDevice);
 
-  ierr = hipMalloc(&ctx->d_eta, nbytes);
-  ierr = hipMemcpy(ctx->d_eta, ctx->eta, nbytes, hipMemcpyHostToDevice);
+  ierr = hipMalloc(&ctx->device->eta, nbytes);
+  ierr = hipMemcpy(ctx->device->eta, ctx->host->eta, nbytes, hipMemcpyHostToDevice);
 
-  ierr = hipMalloc(&ctx->d_a, nbytes);
-  ierr = hipMemcpy(ctx->d_a, ctx->a, nbytes, hipMemcpyHostToDevice);
+  ierr = hipMalloc(&ctx->device->a, nbytes);
+  ierr = hipMemcpy(ctx->device->a, ctx->host->a, nbytes, hipMemcpyHostToDevice);
 
-  ierr = hipMalloc(&ctx->d_f0, nbytes);
-  ierr = hipMemcpy(ctx->d_f0, ctx->f0, nbytes, hipMemcpyHostToDevice);
+  ierr = hipMalloc(&ctx->device->f0, nbytes);
+  ierr = hipMemcpy(ctx->device->f0, ctx->host->f0, nbytes, hipMemcpyHostToDevice);
 
-  ierr = hipMalloc(&ctx->d_b, nbytes);
-  ierr = hipMemcpy(ctx->d_b, ctx->b, nbytes, hipMemcpyHostToDevice);
+  ierr = hipMalloc(&ctx->device->b, nbytes);
+  ierr = hipMemcpy(ctx->device->b, ctx->host->b, nbytes, hipMemcpyHostToDevice);
 
-  ierr = hipMalloc(&ctx->d_V0, nbytes);
-  ierr = hipMemcpy(ctx->d_V0, ctx->V0, nbytes, hipMemcpyHostToDevice);
-  
+  ierr = hipMalloc(&ctx->device->V0, nbytes);
+  ierr = hipMemcpy(ctx->device->V0, ctx->host->V0, nbytes, hipMemcpyHostToDevice);
+
   /* initial condition */
   PetscCall(VecCreate(comm, &U));
   PetscCall(VecSetSizes(U, ((DIM -1) + 1) * npoints, PETSC_DETERMINE)); // slip-rate + state
@@ -297,7 +302,7 @@ int main(int argc, char **argv)
   for (k=0; k<npoints; k++) {
     double tau_init, psi_init;
 
-    tau_init = ctx->k[k] * ctx->yield_point_init[k];
+    tau_init = ctx->host->k[k] * ctx->host->yield_point_init[k];
     psi_init = alwa.psi_init(tau_init);
 
     u[nvar_per_point * k + 0] = 0.0;
@@ -316,18 +321,16 @@ int main(int argc, char **argv)
   PetscCall(TSSetProblemType(ts, TS_NONLINEAR));
 
   PetscCall(TSSetApplicationContext(ts, static_cast<void*>(&out_file)));
-  
-    {
-        PetscBool isseq;
-        PetscCall(PetscObjectTypeCompare((PetscObject)U,"seq",&isseq));
-        if (isseq) {
-	    PetscCall(TSSetRHSFunction(ts, NULL, RHSFunction_spring_slider_batch, static_cast<void*>(ctx)));
-	} else {
-                PetscCall(TSSetRHSFunction(ts, NULL, RHSFunction_spring_slider_batch_hip, static_cast<void*>(ctx)));
 
-   // 		PetscCall(TSSetRHSFunction(ts, NULL, RHSFunction_spring_slider_batch_hip, NULL));
-	}
-  }  
+  {
+    PetscBool isseq;
+    PetscCall(PetscObjectTypeCompare((PetscObject)U,"seq",&isseq));
+    if (isseq) {
+	     PetscCall(TSSetRHSFunction(ts, NULL, RHSFunction_spring_slider_batch, static_cast<void*>(ctx)));
+	  } else {
+      PetscCall(TSSetRHSFunction(ts, NULL, RHSFunction_spring_slider_batch_hip, static_cast<void*>(ctx)));
+	  }
+  }
 
   PetscCall(TSSetSolution(ts, U));
   PetscCall(TSSetMaxTime(ts, final_time));
